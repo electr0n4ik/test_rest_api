@@ -488,3 +488,7 @@ migrate -database "postgres://postgres:12345@localhost:5432/postgres?sslmode=dis
 migrate create -ext sql -dir migrations -seq create_albums_table
 
 go get -u github.com/jackc/pgx/v4
+
+
+go list -m all > requirements.txt
+go get -u
