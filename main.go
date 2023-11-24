@@ -2,25 +2,24 @@ package main
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/jinzhu/gorm"
+	"log"
 	"net/http"
 )
 
-// album представляет данные об альбоме.
-type album struct {
-	ID     string  `json:"id"`
-	Title  string  `json:"title"`
-	Artist string  `json:"artist"`
-	Price  float64 `json:"price"`
-}
+var db *pgxpool.Pool
 
-// albums - срез для занесения данных о записях альбомов.
-var albums = []album{
-	{ID: "1", Title: "Blue Train", Artist: "John Coltrane", Price: 56.99},
-	{ID: "2", Title: "Jeru", Artist: "Gerry Mulligan", Price: 17.99},
-	{ID: "3", Title: "Sarah Vaughan and Clifford Brown", Artist: "Sarah Vaughan", Price: 39.99},
+type Album struct {
+	ID     uint `gorm:"primaryKey"`
+	Title  string
+	Artist string
+	Price  float64
 }
 
 func main() {
+	defer db.Close()
+
 	router := gin.Default()
 	router.GET("/albums", getAlbums)
 	router.GET("/albums/:id", getAlbumByID)
@@ -30,9 +29,30 @@ func main() {
 
 }
 
-// getAlbums возвращает список всех альбомов в формате JSON.
 func getAlbums(c *gin.Context) {
-	c.IndentedJSON(http.StatusOK, albums)
+	var result []Album
+	if err := db.Model(&Album{}).Find(&result).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
+func getAlbumByID(c *gin.Context) {
+	id := c.Param("id")
+
+	var a Album
+	if err := db.First(&a, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.IndentedJSON(http.StatusNotFound, gin.H{"message": "album not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
+		}
+		return
+	}
+
+	c.IndentedJSON(http.StatusOK, a)
 }
 
 // postAlbums добавляет альбом из JSON, полученного в теле запроса.
@@ -42,26 +62,39 @@ func postAlbums(c *gin.Context) {
 	// Вызовите BindJSON, чтобы привязать полученный JSON к
 	// newAlbum.
 	if err := c.BindJSON(&newAlbum); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON"})
 		return
 	}
 
-	// Добавьте новый альбом в срез.
-	albums = append(albums, newAlbum)
+	// Вставьте новый альбом в базу данных.
+	_, err := db.Exec(context.Background(), "INSERT INTO albums (title, artist, price) VALUES ($1, $2, $3)", newAlbum.Title, newAlbum.Artist, newAlbum.Price)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
+		return
+	}
+
 	c.IndentedJSON(http.StatusCreated, newAlbum)
 }
 
-// getAlbumByID находит альбом, значение ID которого совпадает с id,
-// переданным клиентом, затем возвращает этот альбом в ответе.
-func getAlbumByID(c *gin.Context) {
-	id := c.Param("id")
-
-	// Пройдитесь по списку альбомов, ища
-	// альбом, значение ID которого совпадает с параметром.
-	for _, a := range albums {
-		if a.ID == id {
-			c.IndentedJSON(http.StatusOK, a)
-			return
-		}
+func init() {
+	var err error
+	db, err = connectDB()
+	if err != nil {
+		log.Fatal(err)
 	}
-	c.IndentedJSON(http.StatusNotFound, gin.H{"message": "album not found"})
+}
+
+func connectDB() (*pgxpool.Pool, error) {
+	connString := "postgresql://postgres:12345@localhost:5432/postgres?sslmode=disable"
+	config, err := pgxpool.ParseConfig(connString)
+	if err != nil {
+		return nil, err
+	}
+
+	db, err := pgxpool.ConnectConfig(context.Background(), config)
+	if err != nil {
+		return nil, err
+	}
+
+	return db, nil
 }

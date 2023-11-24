@@ -445,3 +445,46 @@ $ curl http://localhost:8080/albums/2
     "artist": "Gerry Mulligan",
     "price": 17.99
     }
+
+Для добавления миграций и использования базы данных PostgreSQL в вашем проекте Go с использованием Gin, 
+вы можете использовать стороннюю библиотеку для миграций, такую как "golang-migrate/migrate", 
+и библиотеку для работы с PostgreSQL, например, "github.com/jinzhu/gorm".
+
+Вот пошаговый пример того, как вы можете это сделать:
+
+Шаг 1: Установка библиотек
+Установите необходимые библиотеки с помощью команды go get:
+
+    go get -u github.com/gin-gonic/gin
+    go get -u github.com/jinzhu/gorm
+    go get -u github.com/jinzhu/gorm/dialects/postgres
+    go get -u github.com/jinzhu/gormigrate
+    go get -u github.com/golang-migrate/migrate/v4
+    go get -u github.com/golang-migrate/migrate/v4/database/postgres
+
+    go get -u github.com/golang-migrate/migrate/v4/cmd/migrate
+
+Создание миграции:
+```shell
+migrate create -ext sql -dir migrations -seq create_albums_table
+```
+
+    -- file: migrations/xxxxxxxxxxxx_create_albums_table.up.sql
+    CREATE TABLE albums (
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(255),
+    artist VARCHAR(255),
+    price FLOAT
+    );
+
+
+Применение: 
+
+```shell
+migrate -database "postgres://postgres:12345@localhost:5432/postgres?sslmode=disable" -path migrations up
+```
+
+
+migrate create -ext sql -dir migrations -seq create_albums_table
+
+go get -u github.com/jackc/pgx/v4
