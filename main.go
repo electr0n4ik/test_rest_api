@@ -1,24 +1,33 @@
 package main
 
 import (
+	"context"
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v4/pgxpool"
-	"github.com/jinzhu/gorm"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 	"log"
 	"net/http"
 )
 
-var db *pgxpool.Pool
+var db *gorm.DB
 
 type Album struct {
-	ID     uint `gorm:"primaryKey"`
+	gorm.Model
 	Title  string
 	Artist string
 	Price  float64
 }
 
 func main() {
-	defer db.Close()
+	defer func() {
+		if db != nil {
+			sqlDB, err := db.DB()
+			if err != nil {
+				log.Fatal(err)
+			}
+			sqlDB.Close()
+		}
+	}()
 
 	router := gin.Default()
 	router.GET("/albums", getAlbums)
@@ -26,12 +35,11 @@ func main() {
 	router.POST("/albums", postAlbums)
 
 	router.Run("localhost:8080")
-
 }
 
 func getAlbums(c *gin.Context) {
 	var result []Album
-	if err := db.Model(&Album{}).Find(&result).Error; err != nil {
+	if err := db.Find(&result).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
 		return
 	}
@@ -43,7 +51,7 @@ func getAlbumByID(c *gin.Context) {
 	id := c.Param("id")
 
 	var a Album
-	if err := db.First(&a, id).Error; err != nil {
+	if err := db.Where("id = ?", id).First(&a).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			c.IndentedJSON(http.StatusNotFound, gin.H{"message": "album not found"})
 		} else {
@@ -57,7 +65,7 @@ func getAlbumByID(c *gin.Context) {
 
 // postAlbums добавляет альбом из JSON, полученного в теле запроса.
 func postAlbums(c *gin.Context) {
-	var newAlbum album
+	var newAlbum Album
 
 	// Вызовите BindJSON, чтобы привязать полученный JSON к
 	// newAlbum.
@@ -66,9 +74,8 @@ func postAlbums(c *gin.Context) {
 		return
 	}
 
-	// Вставьте новый альбом в базу данных.
-	_, err := db.Exec(context.Background(), "INSERT INTO albums (title, artist, price) VALUES ($1, $2, $3)", newAlbum.Title, newAlbum.Artist, newAlbum.Price)
-	if err != nil {
+	result := db.WithContext(context.Background()).Exec("INSERT INTO albums (title, artist, price) VALUES (?, ?, ?)", newAlbum.Title, newAlbum.Artist, newAlbum.Price)
+	if result.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
 		return
 	}
@@ -84,14 +91,9 @@ func init() {
 	}
 }
 
-func connectDB() (*pgxpool.Pool, error) {
+func connectDB() (*gorm.DB, error) {
 	connString := "postgresql://postgres:12345@localhost:5432/postgres?sslmode=disable"
-	config, err := pgxpool.ParseConfig(connString)
-	if err != nil {
-		return nil, err
-	}
-
-	db, err := pgxpool.ConnectConfig(context.Background(), config)
+	db, err := gorm.Open(postgres.Open(connString), &gorm.Config{})
 	if err != nil {
 		return nil, err
 	}

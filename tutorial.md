@@ -461,6 +461,11 @@ $ curl http://localhost:8080/albums/2
     go get -u github.com/jinzhu/gormigrate
     go get -u github.com/golang-migrate/migrate/v4
     go get -u github.com/golang-migrate/migrate/v4/database/postgres
+    
+    ?go get -u gorm.io/gorm
+    ?go get gorm.io/driver/postgres
+
+
 
     go get -u github.com/golang-migrate/migrate/v4/cmd/migrate
 
